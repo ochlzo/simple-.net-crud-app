@@ -132,6 +132,72 @@ public sealed class SiteOwnerAuthServiceTests
         }
     }
 
+    [TestMethod]
+    public async Task UpdateSiteAsync_UpdatesOnlyOwnedSiteName()
+    {
+        var ownerOneEmail = BuildTestEmail();
+        var ownerTwoEmail = BuildTestEmail();
+        const string password = "SamplePassword123!";
+        var ownerOneId = await InsertOwnerAsync(ownerOneEmail, password);
+        var ownerTwoId = await InsertOwnerAsync(ownerTwoEmail, password);
+        var siteIds = new List<int>();
+
+        try
+        {
+            var editableSiteId = await InsertSiteAsync(ownerOneId, "Old Name");
+            siteIds.Add(editableSiteId);
+            siteIds.Add(await InsertSiteAsync(ownerTwoId, "Other Owner Site"));
+
+            var service = new SiteOwnerAuthService(ConnectionString);
+
+            await service.UpdateSiteAsync(editableSiteId, ownerOneId, "Updated Name");
+            var sites = await service.LoadSitesByOwnerAsync(ownerOneId);
+
+            CollectionAssert.AreEqual(new[] { "Updated Name" }, sites.Select(site => site.SiteName).ToArray());
+        }
+        finally
+        {
+            await DeleteSitesAsync(siteIds);
+            await DeleteOwnerAsync(ownerOneEmail);
+            await DeleteOwnerAsync(ownerTwoEmail);
+        }
+    }
+
+    [TestMethod]
+    public async Task DeleteSiteAsync_DeletesOnlyOwnedSite()
+    {
+        var ownerOneEmail = BuildTestEmail();
+        var ownerTwoEmail = BuildTestEmail();
+        const string password = "SamplePassword123!";
+        var ownerOneId = await InsertOwnerAsync(ownerOneEmail, password);
+        var ownerTwoId = await InsertOwnerAsync(ownerTwoEmail, password);
+        var siteIds = new List<int>();
+
+        try
+        {
+            var deletableSiteId = await InsertSiteAsync(ownerOneId, "Delete Me");
+            siteIds.Add(deletableSiteId);
+            var remainingSiteId = await InsertSiteAsync(ownerTwoId, "Keep Me");
+            siteIds.Add(remainingSiteId);
+
+            var service = new SiteOwnerAuthService(ConnectionString);
+
+            await service.DeleteSiteAsync(deletableSiteId, ownerOneId);
+            var ownerOneSites = await service.LoadSitesByOwnerAsync(ownerOneId);
+            var ownerTwoSites = await service.LoadSitesByOwnerAsync(ownerTwoId);
+
+            Assert.AreEqual(0, ownerOneSites.Count);
+            CollectionAssert.AreEqual(new[] { remainingSiteId }, ownerTwoSites.Select(site => site.SiteId).ToArray());
+            CollectionAssert.AreEqual(new[] { "Keep Me" }, ownerTwoSites.Select(site => site.SiteName).ToArray());
+        }
+        finally
+        {
+            await DeleteSitesAsync(siteIds);
+            await DeleteOwnerAsync(ownerOneEmail);
+            await DeleteOwnerAsync(ownerTwoEmail);
+        }
+    }
+
     private static string BuildTestEmail() => $"codex_{Guid.NewGuid():N}@example.com";
 
     private static async Task<int> InsertOwnerAsync(string email, string password)

@@ -99,6 +99,76 @@ public sealed class SiteOwnerAuthService
         return sites;
     }
 
+    public async Task<OwnedSite> CreateSiteAsync(
+        int ownerId,
+        string siteName,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO site (site_name, owner_id)
+            VALUES (@siteName, @ownerId);
+            """;
+        command.Parameters.AddWithValue("@siteName", siteName);
+        command.Parameters.AddWithValue("@ownerId", ownerId);
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+
+        return new OwnedSite(Convert.ToInt32(command.LastInsertedId), siteName);
+    }
+
+    public async Task UpdateSiteAsync(
+        int siteId,
+        int ownerId,
+        string siteName,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE site
+            SET site_name = @siteName
+            WHERE site_id = @siteId AND owner_id = @ownerId;
+            """;
+        command.Parameters.AddWithValue("@siteName", siteName);
+        command.Parameters.AddWithValue("@siteId", siteId);
+        command.Parameters.AddWithValue("@ownerId", ownerId);
+
+        var rowsUpdated = await command.ExecuteNonQueryAsync(cancellationToken);
+        if (rowsUpdated == 0)
+        {
+            throw new InvalidOperationException("Site could not be updated.");
+        }
+    }
+
+    public async Task DeleteSiteAsync(
+        int siteId,
+        int ownerId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            DELETE FROM site
+            WHERE site_id = @siteId AND owner_id = @ownerId;
+            """;
+        command.Parameters.AddWithValue("@siteId", siteId);
+        command.Parameters.AddWithValue("@ownerId", ownerId);
+
+        var rowsDeleted = await command.ExecuteNonQueryAsync(cancellationToken);
+        if (rowsDeleted == 0)
+        {
+            throw new InvalidOperationException("Site could not be deleted.");
+        }
+    }
+
     private static async Task<bool> OwnerEmailExistsAsync(
         MySqlConnection connection,
         string email,

@@ -2,10 +2,6 @@ namespace edp_gui_app;
 
 public sealed partial class MainAppWindow
 {
-    private readonly BindingSource _sitesBindingSource = new();
-    private IReadOnlyList<OwnedSite> _loadedSites = Array.Empty<OwnedSite>();
-    private string? _siteLoadError;
-
     private (
         Control Panel,
         TextBox Search,
@@ -85,17 +81,28 @@ public sealed partial class MainAppWindow
         };
         search.TextChanged += (_, _) => ApplyOwnedSiteFilter();
 
+        var addSite = new Button
+        {
+            AutoSize = true,
+            Text = "Add Site",
+            Padding = new Padding(10, 6, 10, 6),
+            Anchor = AnchorStyles.Right
+        };
+        addSite.Click += OnAddSiteClicked;
+
         var searchRow = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             AutoSize = true,
-            ColumnCount = 2,
+            ColumnCount = 3,
             Margin = new Padding(0, 0, 0, 12)
         };
         searchRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         searchRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        searchRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         searchRow.Controls.Add(searchLabel, 0, 0);
         searchRow.Controls.Add(search, 1, 0);
+        searchRow.Controls.Add(addSite, 2, 0);
 
         var status = new Label
         {
@@ -134,6 +141,22 @@ public sealed partial class MainAppWindow
             AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
             LinkBehavior = LinkBehavior.HoverUnderline,
             TrackVisitedState = false
+        });
+        grid.Columns.Add(new DataGridViewButtonColumn
+        {
+            Name = "EditSite",
+            HeaderText = string.Empty,
+            Text = "Edit",
+            UseColumnTextForButtonValue = true,
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells
+        });
+        grid.Columns.Add(new DataGridViewButtonColumn
+        {
+            Name = "DeleteSite",
+            HeaderText = string.Empty,
+            Text = "Delete",
+            UseColumnTextForButtonValue = true,
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells
         });
         grid.CellContentClick += OnSitesGridCellContentClick;
 
@@ -214,125 +237,5 @@ public sealed partial class MainAppWindow
         layout.Controls.Add(back);
 
         return (layout, siteIdValue, siteNameValue);
-    }
-
-    private async Task EnterOwnerWorkspaceAsync(SiteOwner owner)
-    {
-        _flowController.ShowOwnerSites(owner);
-        ResetOwnerWorkspace();
-        ApplyState();
-        await ReloadOwnedSitesAsync();
-    }
-
-    private void ResetOwnerWorkspace()
-    {
-        _loadedSites = Array.Empty<OwnedSite>();
-        _siteLoadError = null;
-        _sitesBindingSource.DataSource = Array.Empty<OwnedSite>();
-        _sitesGrid.Visible = false;
-        _siteSearchTextBox.Clear();
-        ShowOwnerSitesStatus(string.Empty, Color.DimGray);
-        _siteDetailsIdValueLabel.Text = "-";
-        _siteDetailsNameValueLabel.Text = "-";
-    }
-
-    private void ShowOwnerSitesView()
-    {
-        _flowController.ShowOwnerSites();
-        ApplyState();
-        ApplyOwnedSiteFilter();
-    }
-
-    private async void OnRefreshSitesClicked(object? sender, EventArgs e)
-    {
-        await ReloadOwnedSitesAsync();
-    }
-
-    private async Task ReloadOwnedSitesAsync()
-    {
-        var owner = _flowController.CurrentOwner;
-        if (owner is null)
-        {
-            return;
-        }
-
-        try
-        {
-            SetBusy(true);
-            _siteLoadError = null;
-            ShowOwnerSitesStatus("Loading sites...", Color.DimGray);
-
-            _loadedSites = await _authService.LoadSitesByOwnerAsync(owner.OwnerId);
-            ApplyOwnedSiteFilter();
-        }
-        catch (Exception ex)
-        {
-            _loadedSites = Array.Empty<OwnedSite>();
-            _siteLoadError = $"Could not load sites: {ex.Message}";
-            _sitesBindingSource.DataSource = Array.Empty<OwnedSite>();
-            _sitesGrid.Visible = false;
-            ShowOwnerSitesStatus(_siteLoadError, Color.Firebrick);
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
-
-    private void ApplyOwnedSiteFilter()
-    {
-        if (_siteLoadError is not null)
-        {
-            return;
-        }
-
-        var filteredSites = OwnedSiteFilter.Apply(_loadedSites, _siteSearchTextBox.Text).ToArray();
-        _sitesBindingSource.DataSource = filteredSites;
-        _sitesGrid.Visible = filteredSites.Length > 0;
-
-        if (filteredSites.Length > 0)
-        {
-            ShowOwnerSitesStatus(string.Empty, Color.DimGray);
-            return;
-        }
-
-        var message = _loadedSites.Count == 0
-            ? "No sites are assigned to this owner yet."
-            : "No matching sites found.";
-        ShowOwnerSitesStatus(message, Color.DimGray);
-    }
-
-    private void OnSitesGridCellContentClick(object? sender, DataGridViewCellEventArgs e)
-    {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0)
-        {
-            return;
-        }
-
-        if (_sitesGrid.Columns[e.ColumnIndex].Name != "SiteName")
-        {
-            return;
-        }
-
-        if (_sitesGrid.Rows[e.RowIndex].DataBoundItem is not OwnedSite site)
-        {
-            return;
-        }
-
-        _flowController.ShowSiteDetails(site);
-        ApplyState();
-    }
-
-    private void UpdateSiteDetailsPanel()
-    {
-        var site = _flowController.SelectedSite;
-        _siteDetailsIdValueLabel.Text = site?.SiteId.ToString() ?? "-";
-        _siteDetailsNameValueLabel.Text = site?.SiteName ?? "-";
-    }
-
-    private void ShowOwnerSitesStatus(string text, Color color)
-    {
-        _ownerSitesStatusLabel.Text = text;
-        _ownerSitesStatusLabel.ForeColor = color;
     }
 }
