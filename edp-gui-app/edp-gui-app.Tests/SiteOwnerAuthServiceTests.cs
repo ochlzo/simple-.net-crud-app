@@ -101,9 +101,40 @@ public sealed class SiteOwnerAuthServiceTests
         }
     }
 
+    [TestMethod]
+    public async Task LoadSitesByOwnerAsync_ReturnsOnlySitesForThatOwner_OrderedBySiteName()
+    {
+        var ownerOneEmail = BuildTestEmail();
+        var ownerTwoEmail = BuildTestEmail();
+        const string password = "SamplePassword123!";
+        var ownerOneId = await InsertOwnerAsync(ownerOneEmail, password);
+        var ownerTwoId = await InsertOwnerAsync(ownerTwoEmail, password);
+        var siteIds = new List<int>();
+
+        try
+        {
+            siteIds.Add(await InsertSiteAsync(ownerOneId, "Zulu Plaza"));
+            siteIds.Add(await InsertSiteAsync(ownerOneId, "Alpha Center"));
+            siteIds.Add(await InsertSiteAsync(ownerTwoId, "Other Owner Site"));
+
+            var service = new SiteOwnerAuthService(ConnectionString);
+
+            var sites = await service.LoadSitesByOwnerAsync(ownerOneId);
+
+            CollectionAssert.AreEqual(new[] { "Alpha Center", "Zulu Plaza" }, sites.Select(site => site.SiteName).ToArray());
+            CollectionAssert.AreEqual(siteIds.Take(2).OrderBy(id => id == siteIds[1] ? 0 : 1).ToArray(), sites.Select(site => site.SiteId).ToArray());
+        }
+        finally
+        {
+            await DeleteSitesAsync(siteIds);
+            await DeleteOwnerAsync(ownerOneEmail);
+            await DeleteOwnerAsync(ownerTwoEmail);
+        }
+    }
+
     private static string BuildTestEmail() => $"codex_{Guid.NewGuid():N}@example.com";
 
-    private static async Task InsertOwnerAsync(string email, string password)
+    private static async Task<int> InsertOwnerAsync(string email, string password)
     {
         await using var connection = new MySqlConnection(ConnectionString);
         await connection.OpenAsync();
@@ -116,6 +147,43 @@ public sealed class SiteOwnerAuthServiceTests
         command.Parameters.AddWithValue("@name", "Codex Test Owner");
         command.Parameters.AddWithValue("@email", email);
         command.Parameters.AddWithValue("@password", password);
+
+        await command.ExecuteNonQueryAsync();
+
+        return Convert.ToInt32(command.LastInsertedId);
+    }
+
+    private static async Task<int> InsertSiteAsync(int ownerId, string siteName)
+    {
+        await using var connection = new MySqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO site (site_name, owner_id)
+            VALUES (@siteName, @ownerId);
+            """;
+        command.Parameters.AddWithValue("@siteName", siteName);
+        command.Parameters.AddWithValue("@ownerId", ownerId);
+
+        await command.ExecuteNonQueryAsync();
+
+        return Convert.ToInt32(command.LastInsertedId);
+    }
+
+    private static async Task DeleteSitesAsync(IEnumerable<int> siteIds)
+    {
+        var ids = siteIds.ToArray();
+        if (ids.Length == 0)
+        {
+            return;
+        }
+
+        await using var connection = new MySqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"DELETE FROM site WHERE site_id IN ({string.Join(", ", ids)});";
 
         await command.ExecuteNonQueryAsync();
     }

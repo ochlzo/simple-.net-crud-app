@@ -1,0 +1,8 @@
+bin/
+obj/
+**/bin/
+**/obj/
+.vs/
+TestResults/
+docs/superpowers/plans/
+docs/superpowers/specs/

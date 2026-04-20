@@ -11,7 +11,8 @@ public sealed class LoginFlowControllerTests
         var controller = new LoginFlowController();
 
         Assert.AreEqual(LoginViewState.Landing, controller.CurrentState);
-        Assert.IsNull(controller.WelcomeOwnerName);
+        Assert.IsNull(controller.CurrentOwner);
+        Assert.IsNull(controller.SelectedSite);
     }
 
     [TestMethod]
@@ -43,7 +44,8 @@ public sealed class LoginFlowControllerTests
         controller.ShowLanding();
 
         Assert.AreEqual(LoginViewState.Landing, controller.CurrentState);
-        Assert.IsNull(controller.WelcomeOwnerName);
+        Assert.IsNull(controller.CurrentOwner);
+        Assert.IsNull(controller.SelectedSite);
     }
 
     [TestMethod]
@@ -55,17 +57,64 @@ public sealed class LoginFlowControllerTests
         controller.ShowLanding();
 
         Assert.AreEqual(LoginViewState.Landing, controller.CurrentState);
-        Assert.IsNull(controller.WelcomeOwnerName);
+        Assert.IsNull(controller.CurrentOwner);
+        Assert.IsNull(controller.SelectedSite);
     }
 
     [TestMethod]
-    public void ShowWelcome_StoresOwnerNameAndMovesToWelcome()
+    public void ShowOwnerSites_StoresOwnerAndMovesToOwnerSites()
     {
         var controller = new LoginFlowController();
+        var owner = new SiteOwner(7, "Maria Santos", "maria@example.com");
 
-        controller.ShowWelcome("Maria Santos");
+        controller.ShowOwnerSites(owner);
 
-        Assert.AreEqual(LoginViewState.Welcome, controller.CurrentState);
-        Assert.AreEqual("Maria Santos", controller.WelcomeOwnerName);
+        Assert.AreEqual(LoginViewState.OwnerSites, controller.CurrentState);
+        Assert.AreEqual(owner, controller.CurrentOwner);
+        Assert.IsNull(controller.SelectedSite);
+    }
+
+    [TestMethod]
+    public void ShowSiteDetails_StoresSelectedSiteAndMovesToSiteDetails()
+    {
+        var controller = new LoginFlowController();
+        var owner = new SiteOwner(7, "Maria Santos", "maria@example.com");
+        var site = new OwnedSite(18, "North Tower");
+        controller.ShowOwnerSites(owner);
+
+        controller.ShowSiteDetails(site);
+
+        Assert.AreEqual(LoginViewState.SiteDetails, controller.CurrentState);
+        Assert.AreEqual(owner, controller.CurrentOwner);
+        Assert.AreEqual(site, controller.SelectedSite);
+    }
+
+    [TestMethod]
+    public void ShowOwnerSites_FromSiteDetails_ReturnsToOwnerSites()
+    {
+        var controller = new LoginFlowController();
+        var owner = new SiteOwner(7, "Maria Santos", "maria@example.com");
+        controller.ShowOwnerSites(owner);
+        controller.ShowSiteDetails(new OwnedSite(18, "North Tower"));
+
+        controller.ShowOwnerSites();
+
+        Assert.AreEqual(LoginViewState.OwnerSites, controller.CurrentState);
+        Assert.AreEqual(owner, controller.CurrentOwner);
+        Assert.IsNull(controller.SelectedSite);
+    }
+
+    [TestMethod]
+    public void Logout_ReturnsToLandingAndClearsOwnerWorkspaceState()
+    {
+        var controller = new LoginFlowController();
+        controller.ShowOwnerSites(new SiteOwner(7, "Maria Santos", "maria@example.com"));
+        controller.ShowSiteDetails(new OwnedSite(18, "North Tower"));
+
+        controller.Logout();
+
+        Assert.AreEqual(LoginViewState.Landing, controller.CurrentState);
+        Assert.IsNull(controller.CurrentOwner);
+        Assert.IsNull(controller.SelectedSite);
     }
 }
